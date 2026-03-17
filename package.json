@@ -5,7 +5,7 @@
   "main": "index.js",
   "type": "commonjs",
   "bin": {
-    "smartcoder": "./index.js"
+    "smartcoder": "index.js"
   },
   "scripts": {
     "start": "node index.js"
@@ -19,7 +19,7 @@
     "automation",
     "productivity"
   ],
-  "author": "Your Name",
+  "author": "Shekhar",
   "license": "ISC",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.79.0",
