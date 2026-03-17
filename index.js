@@ -1,17 +1,12 @@
 #!/usr/bin/env node
 
-const fs = require("fs");
-const path = require("path");
-const os = require("os");
-const { Command } = require("commander");
-const chalk = require("chalk").default;
-
-let Anthropic;
-try {
-    Anthropic = require("@anthropic-ai/sdk");
-} catch (e) {
-    // SDK not installed yet
-}
+import fs from "fs";
+import path from "path";
+import os from "os";
+import { Command } from "commander";
+import chalk from "chalk";
+import { execSync } from "child_process";
+import Anthropic from "@anthropic-ai/sdk";
 
 const program = new Command();
 
@@ -43,7 +38,6 @@ program
     .command("dayreport")
     .description("Show today's work report")
     .action(async () => {
-        const { execSync } = require("child_process");
 
         let commits = "";
         let diff = "";
@@ -105,7 +99,7 @@ Keep the tone professional but readable. Use markdown formatting.`;
             try {
                 const client = new Anthropic({ apiKey: config.apiKey });
                 const response = await client.messages.create({
-                    model: "claude-opus-4-5",
+                    model: "claude-3-7-sonnet-20250219",
                     max_tokens: 800,
                     messages: [{ role: "user", content: prompt }],
                 });
@@ -251,7 +245,6 @@ program
         /// MARK: FETCH RECENT GIT LOG
         let recentCommits = "";
         try {
-            const { execSync } = require("child_process");
             recentCommits = execSync("git log --oneline -10", { encoding: "utf-8" }).trim();
         } catch {
             recentCommits = "(not a git repository or no commits)";
@@ -295,7 +288,7 @@ ${recentCommits}`;
             try {
                 const client = new Anthropic({ apiKey: config.apiKey });
                 const response = await client.messages.create({
-                    model: "claude-opus-4-5",
+                    model: "claude-3-7-sonnet-20250219",
                     max_tokens: 2000,
                     messages: [{ role: "user", content: prompt }],
                 });
