@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "smartcoder": {
+      "command": "node",
+      "args": ["/Users/ajinkyadude/Desktop/smartCoder/index.js"],
+      "type": "stdio"
+    }
+  }
+}
