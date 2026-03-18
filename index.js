@@ -239,7 +239,7 @@ const getProjectSummaryData = () => {
                 .map(f => {
                     const fullPath = path.join(dir, f);
                     const isDir = fs.statSync(fullPath).isDirectory();
-                    return `${"  ".repeat(depth)}${isDir ? "📁" : "📄"} ${f}`;
+                    return `${"  ".repeat(depth)}* ${f}`;
                 }).flat();
         } catch { return []; }
     };
@@ -336,7 +336,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             let analysis = "";
             try {
                 analysis = await callClaude(
-                    "You are a senior developer summarizing today's coding work. Analyze the git data and produce a structured bullet-point summary. IGNORE: formatting, typos, minor refactors. HIGHLIGHT: features added, bugs fixed, architectural/logic changes. Format output as: 🚀 Features: ..., 🐛 Bug Fixes: ..., 🏗 Architecture: ..., 📝 Other: ...",
+                    "You are a senior developer summarizing today's coding work. Analyze the git data and produce a structured bullet-point summary using '* ' for bullets. IGNORE: formatting, typos, minor refactors. HIGHLIGHT: features added, bugs fixed, architectural/logic changes. Format output with subtitles as: -- Features --, -- Bug Fixes --, -- Architecture --, -- Other --.",
                     [{ role: "user", content: rawData }]
                 );
             } catch (apiError) {
@@ -353,7 +353,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         if (name === "get_project_summary") {
             const data = getProjectSummaryData();
-            const report = `Tech Stack: ${data.stack} (${data.displayName})\n\nFile Tree:\n${data.fileTree}\n\nRecent History:\n${data.recentCommits}`;
+            const report = `-->>-- Project Summary --<<--\n\n-- Tech Stack --\n* Stack: ${data.stack} (${data.displayName})\n\n-- File Tree --\n${data.fileTree}\n\n-- Recent History --\n${data.recentCommits}`;
             return {
                 content: [{ type: "text", text: report }],
             };
@@ -362,7 +362,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (name === "get_developer_context") {
             const cwd = process.cwd();
             const stack = detectTechStack(cwd);
-            const context = `Tech Stack: ${stack.stack}\nRole: ${stack.displayName}\nPersona: ${stack.persona}`;
+            const context = `-->>-- Developer Context --<<--\n\n-- Tech Stack --\n* ${stack.stack}\n\n-- Role --\n* ${stack.displayName}\n\n-- Persona --\n* ${stack.persona}`;
             return {
                 content: [{ type: "text", text: context }],
             };
@@ -419,12 +419,12 @@ program
 
             const rawData = `Git Commits:\n${commits || "No commits today"}\n\nFull Messages:\n${fullMessages || "N/A"}\n\nFile Changes:\n${stats || "No changes"}\n\nFiles Modified:\n${files || "N/A"}`;
 
-            console.log("\n📅 Today's Work Report:\n");
-            console.log("Analyzing commits...");
+            console.log("\n-->>-- Today's Work Report --<<--\n");
+            console.log("-- Analyzing commits --");
 
             try {
                 const analysis = await callClaude(
-                    "You are a senior developer summarizing today's coding work. Analyze the git data and produce a structured bullet-point summary. IGNORE: formatting, typos, minor refactors. HIGHLIGHT: features added, bugs fixed, architectural/logic changes. Format output as: 🚀 Features: ..., 🐛 Bug Fixes: ..., 🏗 Architecture: ..., 📝 Other: ...",
+                    "You are a senior developer summarizing today's coding work. Analyze the git data and produce a structured bullet-point summary using '* ' for bullets. IGNORE: formatting, typos, minor refactors. HIGHLIGHT: features added, bugs fixed, architectural/logic changes. Format output with subtitles as: -- Features --, -- Bug Fixes --, -- Architecture --, -- Other --.",
                     [{ role: "user", content: rawData }]
                 );
                 console.log(analysis);
@@ -445,11 +445,12 @@ program
     .action(() => {
         try {
             const data = getProjectSummaryData();
-            console.log("\n📊 Project Summary:\n");
-            console.log(`Tech Stack: ${data.stack} (${data.displayName})\n`);
-            console.log("File Tree:");
+            console.log("\n-->>-- Project Summary --<<--\n");
+            console.log("-- Tech Stack --");
+            console.log(`* ${data.stack} (${data.displayName})\n`);
+            console.log("-- File Tree --");
             console.log(data.fileTree);
-            console.log("\nRecent History:");
+            console.log("\n-- Recent History --");
             console.log(data.recentCommits);
             console.log("");
         } catch (error) {
@@ -467,9 +468,10 @@ program
 
         if (subcommand === "mode") {
             // Interactive mode
-            console.log(`\n[SmartCoder] Developer Mode: Acting as ${stack.displayName}\n`);
+            console.log(`\n-->>-- Developer Mode --<<--\n`);
+            console.log(`-- Acting as ${stack.displayName} --\n`);
             console.log(
-                `Type your questions or commands. Type '/exit' or leave empty to quit.\n`
+                `* Type your questions or commands.\n* Type '/exit' or leave empty to quit.\n`
             );
 
             const conversationHistory = [];
@@ -516,10 +518,10 @@ program
             askQuestion();
         } else {
             // Show project context
-            console.log(`\n[SmartCoder] Developer Context:\n`);
-            console.log(`Tech Stack: ${stack.stack}`);
-            console.log(`Role: ${stack.displayName}`);
-            console.log(`\nUse 'smartcoder developer mode' to start interactive session.\n`);
+            console.log(`\n-->>-- Developer Context --<<--\n`);
+            console.log(`* Tech Stack: ${stack.stack}`);
+            console.log(`* Role: ${stack.displayName}`);
+            console.log(`\n* Use 'smartcoder developer mode' to start interactive session.\n`);
         }
     });
 

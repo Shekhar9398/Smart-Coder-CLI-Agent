@@ -1,16 +1,16 @@
-# SmartCoder CLI
+-->>-- SmartCoder CLI --<<--
 
 A lightweight AI agent for project summaries and daily developer reports.
 
-## 🚀 Installation
+-- Installation --
 
-Install the CLI globally:
+Install the package via GitHub URL:
 
 ```bash
-npm install -g smartcoder-cli-tool-by-shekhar
+npm install -g git+https://github.com/Shekhar9398/Smart-Coder-CLI-Agent.git
 ```
 
-## 🔑 Setup
+-- Setup --
 
 Set your Claude API key for AI-powered insights:
 
@@ -18,20 +18,13 @@ Set your Claude API key for AI-powered insights:
 smartcoder set-key YOUR_API_KEY
 ```
 
-## 📦 Usage
+-- Available Commands --
 
-### Project Summary
-Get a detailed technical overview of your project:
-```bash
-smartcoder summary
-```
+* dayreport: Generate an AI-powered summary of today's git activity
+* summary: Get a detailed technical overview of your project
+* developer [subcommand]: Start interactive developer mode (use 'mode' to enter interactive session)
 
-### Daily Work Report
-Generate a summary of today's git activity:
-```bash
-smartcoder dayreport
-```
+-- Requirements --
 
-## ⚠️ Requirements
-- Node.js >= 18
-- Run inside a git repository for `dayreport`
+* Node.js >= 18
+* Run inside a git repository for dayreport
