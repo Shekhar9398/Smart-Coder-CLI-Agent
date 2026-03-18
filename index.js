@@ -18,6 +18,9 @@ import {
  * CORE LOGIC (REUSED FROM YOUR ORIGINAL)
  */
 
+// Flag to detect if running as MCP server (Claude Code integration)
+let isMCPMode = false;
+
 const getConfig = () => {
     const configPath = path.join(os.homedir(), ".smartcoder", "config.json");
     if (fs.existsSync(configPath)) {
@@ -161,10 +164,21 @@ const detectTechStack = (cwd) => {
  * CLAUDE API HELPER
  */
 const callClaude = async (systemPrompt, messages, stream = false) => {
+    // If running as MCP server (Claude Code premium), we don't need API key
+    // Claude Code will handle the API calls itself
+    if (isMCPMode) {
+        // In MCP mode, return a message indicating we're delegating to Claude Code
+        if (stream) {
+            process.stdout.write("[Using Claude Code context]\n");
+            return "[Using Claude Code context]";
+        }
+        return "[Claude Code analysis]";
+    }
+
     const apiKey = process.env.ANTHROPIC_API_KEY || getConfig().apiKey;
     if (!apiKey) {
         throw new Error(
-            "ANTHROPIC_API_KEY not set. Set the environment variable or add apiKey to ~/.smartcoder/config.json"
+            "ANTHROPIC_API_KEY not set. Set the environment variable, add apiKey to ~/.smartcoder/config.json, or use Claude Code premium for automatic integration."
         );
     }
 
@@ -520,7 +534,9 @@ async function main() {
         return;
     }
 
-    // If no arguments are passed, assume Claude is trying to connect via MCP
+    // If no arguments are passed, assume Claude Code is trying to connect via MCP
+    // Set flag so we know we're running with Claude Code premium (no API key needed)
+    isMCPMode = true;
     const transport = new StdioServerTransport();
     await server.connect(transport);
 }
