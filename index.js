@@ -5,6 +5,7 @@ import path from "path";
 import os from "os";
 import { execSync } from "child_process";
 import Anthropic from "@anthropic-ai/sdk";
+import { Command } from "commander";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -121,15 +122,66 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 /**
+ * CLI COMMANDS
+ */
+const program = new Command();
+
+program
+    .command("dayreport")
+    .description("Generate a summary of today's git activity")
+    .action(async () => {
+        try {
+            const commits = execSync('git log --since="today" --oneline', { encoding: "utf-8" }).trim() || "No commits today";
+            const diff = execSync("git diff HEAD --stat", { encoding: "utf-8" }).trim() || "No changes";
+            console.log("\n📅 Today's Work Report:\n");
+            console.log("Commits:");
+            console.log(commits || "  No commits");
+            console.log("\nChanges:");
+            console.log(diff || "  No changes");
+            console.log("");
+        } catch (error) {
+            console.error("Error generating day report:", error.message);
+            process.exit(1);
+        }
+    });
+
+program
+    .command("summary")
+    .description("Get a detailed technical overview of your project")
+    .action(() => {
+        try {
+            const data = getProjectSummaryData();
+            console.log("\n📊 Project Summary:\n");
+            console.log(`Project Type: ${data.projectType}\n`);
+            console.log("File Tree:");
+            console.log(data.fileTree);
+            console.log("\nRecent History:");
+            console.log(data.recentCommits);
+            console.log("");
+        } catch (error) {
+            console.error("Error generating summary:", error.message);
+            process.exit(1);
+        }
+    });
+
+/**
  * START THE SERVER
  */
 async function main() {
+    // If we are being called via a terminal command (like 'summary' or 'dayreport')
+    // commander (program.parse) will handle it.
+    if (process.argv.length > 2) {
+        await program.parse();
+        return;
+    }
+
+    // If no arguments are passed, assume Claude is trying to connect via MCP
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    // Note: Do not console.log here, as it will break the MCP protocol (which uses stdout)
 }
 
 main().catch((error) => {
-    console.error("Server error:", error);
+    // Crucial: Only use console.error, never console.log here
+    process.stderr.write(`Server error: ${error.message}\n`);
     process.exit(1);
 });
