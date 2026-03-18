@@ -592,9 +592,14 @@ Rules:
 const program = new Command();
 
 program
-    .command("dayreport")
+    .command("day [subcommand]")
     .description("Generate an AI-powered summary of today's git activity")
-    .action(async () => {
+    .action(async (subcommand) => {
+        if (subcommand !== "report") {
+            console.log("\n" + chalk.cyan.bold("-->>-- Day Commands --<<--\n"));
+            console.log(chalk.yellow(`* Use 'smartcoder day report' to generate a daily summary.\n`));
+            return;
+        }
         try {
             const cwd = process.cwd();
             let commits = "";
