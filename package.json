@@ -1,6 +1,6 @@
 {
   "name": "smartcoder-cli-tool-by-shekhar",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "CLI agent for generating project summaries and daily developer reports with optional AI support",
   "main": "index.js",
   "type": "module",
