@@ -20,6 +20,9 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"));
+const CURRENT_VERSION = pkg.version;
+
 const getPrompt = (promptName, defaultPrompt = "") => {
     try {
         const promptPath = path.join(__dirname, "prompts", `${promptName}.md`);
@@ -73,6 +76,48 @@ const saveConfig = (config) => {
         path.join(configDir, "config.json"),
         JSON.stringify(config, null, 2)
     );
+};
+
+/**
+ * UPDATE CHECKER
+ */
+const checkForUpdate = async () => {
+    try {
+        const res = await fetch("https://registry.npmjs.org/smartcoder-cli-tool-by-shekhar/latest", {
+            signal: AbortSignal.timeout(2000)
+        });
+        const data = await res.json();
+        const latestVersion = data.version;
+
+        if (latestVersion && latestVersion.localeCompare(CURRENT_VERSION, undefined, { numeric: true, sensitivity: 'base' }) > 0) {
+            console.log("\n" + chalk.bgYellow.black.bold(" ✨ UPDATE AVAILABLE! ✨ "));
+            console.log(chalk.yellow(`     🟢 Current Version: ${CURRENT_VERSION}`));
+            console.log(chalk.green(`     🟢 Latest Version:  ${latestVersion}\n`));
+            console.log(chalk.cyan(`     🟡 Run the following command to update:`));
+            console.log(chalk.white.bold(`        npm install -g smartcoder-cli-tool-by-shekhar\n`));
+            console.log(chalk.dim("     (Or press Enter to continue...)\n"));
+            
+            // Simple pause to allow user to see the message if they want to update
+            const rl = readline.createInterface({
+                input: process.stdin,
+                output: process.stdout,
+            });
+            await new Promise((resolve) => {
+                const timeout = setTimeout(() => {
+                    rl.close();
+                    resolve();
+                }, 5000); // Wait for 5 seconds or Enter
+
+                rl.on('line', () => {
+                    clearTimeout(timeout);
+                    rl.close();
+                    resolve();
+                });
+            });
+        }
+    } catch (err) {
+        // Silently fail if update check fails (e.g., no internet)
+    }
 };
 
 /**
@@ -923,6 +968,7 @@ program
  */
 async function main() {
     if (process.argv.length > 2) {
+        await checkForUpdate();
         await program.parse();
         return;
     }
