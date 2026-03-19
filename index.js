@@ -15,6 +15,40 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import chalk from "chalk";
 import ora from "ora";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const getPrompt = (promptName, defaultPrompt = "") => {
+    try {
+        const promptPath = path.join(__dirname, "prompts", `${promptName}.md`);
+        if (fs.existsSync(promptPath)) {
+            return fs.readFileSync(promptPath, "utf-8");
+        }
+    } catch {}
+    return defaultPrompt;
+};
+
+const checkClaudeAuth = () => {
+    const claudeJsonPath = path.join(os.homedir(), ".claude.json");
+    return fs.existsSync(claudeJsonPath);
+};
+
+const handleClaudeDelegate = (err, instructions, rawData) => {
+    if (err.message === "CLAUDE_DELEGATE") {
+        console.log("\n" + chalk.cyan.bold("-->>-- Delegating to Claude Code --<<--\n"));
+        console.log("CLAUDE: The user has requested this operation. I am delegating the execution to you since I lack a separate API key. Please read the following instructions and context, and complete the user's request flawlessly.");
+        console.log("\n=== INSTRUCTIONS/PROMPT ===");
+        console.log(instructions);
+        if (rawData) {
+            console.log("\n=== CONTEXT ===");
+            console.log(rawData);
+        }
+        return true;
+    }
+    return false;
+};
 
 /**
  * CORE LOGIC
@@ -45,8 +79,16 @@ const saveConfig = (config) => {
  * TECH STACK DETECTION
  */
 const detectTechStack = (cwd) => {
-    const files = fs.readdirSync(cwd);
-    const allFiles = execSync(`find "${cwd}" -type f -name "*" 2>/dev/null | head -100`, {
+    const contextCachePath = path.join(cwd, ".smartcoder-context.json");
+    if (fs.existsSync(contextCachePath)) {
+        try {
+            const cached = JSON.parse(fs.readFileSync(contextCachePath, "utf-8"));
+            if (cached && cached.stack) return cached;
+        } catch {}
+    }
+
+    const files = fs.readdirSync(cwd).map(f => f.toLowerCase());
+    const allFiles = execSync(`find "${cwd}" -type f -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/dist/*" 2>/dev/null | head -200`, {
         encoding: "utf-8",
         stdio: ["pipe", "pipe", "ignore"],
     })
@@ -58,113 +100,72 @@ const detectTechStack = (cwd) => {
     const hasKotlin = allFiles.some((f) => f.endsWith(".kt"));
     const hasPython = allFiles.some((f) => f.endsWith(".py"));
     const hasGo = allFiles.some((f) => f.endsWith(".go"));
+    const hasTs = allFiles.some((f) => f.endsWith(".ts") || f.endsWith(".tsx"));
+    const hasRuby = allFiles.some((f) => f.endsWith(".rb"));
+    const hasPhp = allFiles.some((f) => f.endsWith(".php"));
+    const hasCsharp = allFiles.some((f) => f.endsWith(".cs"));
+    const hasRust = allFiles.some((f) => f.endsWith(".rs"));
+    const hasJava = allFiles.some((f) => f.endsWith(".java"));
+    
     const hasPubspec = files.includes("pubspec.yaml");
-    const hasPodfile = files.includes("Podfile");
-    const hasGradle = files.includes("build.gradle");
+    const hasPodfile = files.includes("podfile");
+    const hasGradle = files.includes("build.gradle") || files.includes("build.gradle.kts");
     const hasPackageJson = files.includes("package.json");
-    const hasRequirements = files.includes("requirements.txt");
+    const hasRequirements = files.includes("requirements.txt") || files.includes("pyproject.toml");
 
     let packageJsonDeps = [];
     if (hasPackageJson) {
         try {
-            const pkg = JSON.parse(
-                fs.readFileSync(path.join(cwd, "package.json"), "utf-8")
-            );
-            packageJsonDeps = Object.keys({
-                ...pkg.dependencies,
-                ...pkg.devDependencies,
-            }).map((d) => d.toLowerCase());
-        } catch {
-            // Ignore
-        }
+            const pkg = JSON.parse(fs.readFileSync(path.join(cwd, "package.json"), "utf-8"));
+            packageJsonDeps = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).map((d) => d.toLowerCase());
+        } catch {}
     }
+
+    let result = null;
 
     if (hasSwift) {
-        return {
-            stack: "swift",
-            displayName: "iOS Developer",
-            persona: "You are a senior iOS developer with deep UIKit/SwiftUI expertise. Think in terms of Apple HIG, Swift concurrency, Xcode workflows, and best practices for iOS development.",
-        };
-    }
-    if (hasKotlin || hasGradle) {
-        return {
-            stack: "kotlin",
-            displayName: "Android Developer",
-            persona: "You are a senior Android developer with Jetpack, Compose, and coroutines expertise. Think in Material Design, lifecycle management, and Android platform conventions.",
-        };
-    }
-    if (packageJsonDeps.includes("react-native")) {
-        return {
-            stack: "react-native",
-            displayName: "React Native Developer",
-            persona: "You are a cross-platform mobile developer with React Native, Expo, Metro bundler, and native module expertise.",
-        };
-    }
-    if (hasPubspec) {
-        return {
-            stack: "flutter",
-            displayName: "Flutter Developer",
-            persona: "You are a senior Flutter developer with Dart, Widget trees, and pub.dev ecosystem expertise. Think in declarative UI, state management patterns, and platform-specific integrations.",
-        };
-    }
-    if (packageJsonDeps.includes("next")) {
-        return {
-            stack: "nextjs",
-            displayName: "Next.js Developer",
-            persona: "You are a senior Next.js developer with expertise in server-side rendering, API routes, middleware, and modern React patterns.",
-        };
-    }
-    if (packageJsonDeps.includes("react")) {
-        return {
-            stack: "react",
-            displayName: "React Developer",
-            persona: "You are a senior React developer with expertise in hooks, state management, component patterns, and modern frontend architecture.",
-        };
-    }
-    if (
-        packageJsonDeps.includes("express") ||
-        packageJsonDeps.includes("fastify")
-    ) {
-        return {
-            stack: "nodejs-backend",
-            displayName: "Node.js Backend Developer",
-            persona: "You are a senior backend Node.js developer with expertise in REST APIs, database design, middleware, and scalable server architecture.",
-        };
-    }
-    if (hasPackageJson) {
-        return {
-            stack: "nodejs",
-            displayName: "JavaScript Developer",
-            persona: "You are a senior JavaScript developer with expertise in Node.js, npm ecosystem, and modern development practices.",
-        };
-    }
-    if (hasPython || hasRequirements) {
-        return {
-            stack: "python",
-            displayName: "Python Developer",
-            persona: "You are a senior Python developer with expertise in multiple domains. Think in Python idioms, best practices, and ecosystem libraries.",
-        };
-    }
-    if (hasGo) {
-        return {
-            stack: "go",
-            displayName: "Go Developer",
-            persona: "You are a senior Go developer with expertise in concurrency, interfaces, and systems programming.",
-        };
-    }
-    if (hasPodfile) {
-        return {
-            stack: "ios",
-            displayName: "iOS Developer",
-            persona: "You are a senior iOS developer with deep UIKit/SwiftUI expertise. Think in terms of Apple HIG, Swift concurrency, and iOS best practices.",
-        };
+        result = { stack: "swift", displayName: "iOS Developer", persona: "You are a senior iOS developer with deep UIKit/SwiftUI expertise. Think in terms of Apple HIG, Swift concurrency, Xcode workflows, and best practices for iOS development." };
+    } else if (hasKotlin || hasGradle || hasJava) {
+        result = { stack: "kotlin/java", displayName: "Android/Java Developer", persona: "You are a senior Android/Java developer. Think in Material Design, lifecycle management, JVM performance, and Spring Boot/Android conventions." };
+    } else if (packageJsonDeps.includes("react-native") || packageJsonDeps.includes("expo")) {
+        result = { stack: "react-native", displayName: "React Native Developer", persona: "You are a cross-platform mobile developer with React Native, Expo, and native module expertise." };
+    } else if (hasPubspec) {
+        result = { stack: "flutter", displayName: "Flutter Developer", persona: "You are a senior Flutter developer with Dart, Widget trees, and declarative UI expertise." };
+    } else if (packageJsonDeps.includes("next")) {
+        result = { stack: "nextjs", displayName: "Next.js Developer", persona: "You are a senior Next.js developer with expertise in SSR, API routes, middleware, and modern React patterns." };
+    } else if (packageJsonDeps.includes("react")) {
+        result = { stack: "react", displayName: "React Developer", persona: "You are a senior React developer with expertise in hooks, state management, component patterns, and modern frontend architecture." };
+    } else if (packageJsonDeps.includes("vue") || packageJsonDeps.includes("nuxt")) {
+        result = { stack: "vue", displayName: "Vue Developer", persona: "You are a senior Vue.js developer. Think in terms of Composition API, reactivity, and Vue ecosystem best practices." };
+    } else if (packageJsonDeps.includes("express") || packageJsonDeps.includes("fastify") || packageJsonDeps.includes("nestjs")) {
+        result = { stack: "nodejs-backend", displayName: "Node.js Backend Developer", persona: "You are a senior backend Node.js developer with expertise in REST APIs, DB design, middleware, and scalable architecture." };
+    } else if (hasTs) {
+        result = { stack: "typescript", displayName: "TypeScript Developer", persona: "You are a senior TypeScript developer. Think in strict types, interfaces, generics, and robust system design." };
+    } else if (hasPackageJson) {
+        result = { stack: "nodejs", displayName: "JavaScript Developer", persona: "You are a senior JavaScript developer with expertise in Node.js, npm ecosystem, and modern practices." };
+    } else if (hasPython || hasRequirements) {
+        result = { stack: "python", displayName: "Python Developer", persona: "You are a senior Python developer with expertise in Django, FastAPI, Flask, or data science. Think in Python idioms and best practices." };
+    } else if (hasGo) {
+        result = { stack: "go", displayName: "Go Developer", persona: "You are a senior Go developer with expertise in concurrency, interfaces, and systems programming." };
+    } else if (hasRuby) {
+        result = { stack: "ruby", displayName: "Ruby/Rails Developer", persona: "You are a senior Ruby on Rails developer. Think in terms of MVC, ActiveRecord, and Ruby conventions." };
+    } else if (hasPhp) {
+        result = { stack: "php", displayName: "PHP/Laravel Developer", persona: "You are a senior PHP developer with Laravel/Symfony expertise. Think in modern PHP 8+ features and OOP design." };
+    } else if (hasCsharp) {
+        result = { stack: "csharp", displayName: ".NET Developer", persona: "You are a senior C# .NET developer. Think in terms of LINQ, async/await, Entity Framework, and cloud-native ASP.NET Core." };
+    } else if (hasRust) {
+        result = { stack: "rust", displayName: "Rust Developer", persona: "You are a senior Rust developer. Think in terms of the borrow checker, zero-cost abstractions, lifetimes, and safe concurrency." };
+    } else if (hasPodfile) {
+        result = { stack: "ios", displayName: "iOS Developer", persona: "You are a senior iOS developer with deep UIKit/SwiftUI expertise. Think in terms of Apple HIG and iOS best practices." };
+    } else {
+        result = { stack: "generic", displayName: "Software Developer", persona: "You are a senior software developer with broad technical expertise. Ask clarifying questions, spot mistakes, suggest strong approaches." };
     }
 
-    return {
-        stack: "generic",
-        displayName: "Software Developer",
-        persona: "You are a senior software developer with broad technical expertise. Think like an experienced engineer: ask clarifying questions, spot mistakes, suggest better approaches, and plan solutions carefully.",
-    };
+    try {
+        fs.writeFileSync(contextCachePath, JSON.stringify(result, null, 2));
+    } catch {}
+
+    return result;
 };
 
 /**
@@ -232,49 +233,60 @@ const callClaude = async (systemPrompt, messages, stream = false) => {
 
     const apiKey = process.env.ANTHROPIC_API_KEY || getConfig().apiKey;
     if (!apiKey) {
-        throw new Error(
-            "ANTHROPIC_API_KEY not set. Run 'smartcoder set-key YOUR_API_KEY' or set the environment variable."
-        );
+        if (checkClaudeAuth()) {
+            throw new Error("CLAUDE_DELEGATE");
+        } else {
+            throw new Error(
+                "ANTHROPIC_API_KEY not set. Run 'smartcoder set-key YOUR_API_KEY' or set the environment variable. If you have Claude Premium, please log in with 'claude login'."
+            );
+        }
     }
 
     const client = new Anthropic({ apiKey });
 
-    if (stream) {
-        const stream = await client.messages.stream({
-            model: "claude-3-5-sonnet-20241022",
-            max_tokens: 2048,
-            system: systemPrompt,
-            messages: messages.map((m) => ({
-                role: m.role,
-                content: m.content,
-            })),
-        });
+    try {
+        if (stream) {
+            const stream = await client.messages.stream({
+                model: "claude-3-5-sonnet-20241022",
+                max_tokens: 2048,
+                system: systemPrompt,
+                messages: messages.map((m) => ({
+                    role: m.role,
+                    content: m.content,
+                })),
+            });
 
-        let fullResponse = "";
-        for await (const chunk of stream) {
-            if (
-                chunk.type === "content_block_delta" &&
-                chunk.delta.type === "text_delta"
-            ) {
-                const text = chunk.delta.text;
-                process.stdout.write(text);
-                fullResponse += text;
+            let fullResponse = "";
+            for await (const chunk of stream) {
+                if (
+                    chunk.type === "content_block_delta" &&
+                    chunk.delta.type === "text_delta"
+                ) {
+                    const text = chunk.delta.text;
+                    process.stdout.write(text);
+                    fullResponse += text;
+                }
             }
-        }
-        process.stdout.write("\n");
-        return fullResponse;
-    } else {
-        const response = await client.messages.create({
-            model: "claude-3-5-sonnet-20241022",
-            max_tokens: 2048,
-            system: systemPrompt,
-            messages: messages.map((m) => ({
-                role: m.role,
-                content: m.content,
-            })),
-        });
+            process.stdout.write("\n");
+            return fullResponse;
+        } else {
+            const response = await client.messages.create({
+                model: "claude-3-5-sonnet-20241022",
+                max_tokens: 2048,
+                system: systemPrompt,
+                messages: messages.map((m) => ({
+                    role: m.role,
+                    content: m.content,
+                })),
+            });
 
-        return response.content[0].type === "text" ? response.content[0].text : "";
+            return response.content[0].type === "text" ? response.content[0].text : "";
+        }
+    } catch (err) {
+        if (err.status === 401 && checkClaudeAuth()) {
+            throw new Error("CLAUDE_DELEGATE");
+        }
+        throw err;
     }
 };
 
@@ -366,7 +378,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 });
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name, params } = request;
+    const name = request.params.name;
+    const args = request.params.arguments || {};
 
     try {
         if (name === "get_day_report") {
@@ -407,24 +420,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             let analysis = "";
             try {
-                analysis = await callClaude(
-                    `You are a senior engineering lead reviewing a developer's daily work log.
-Produce a PROFESSIONAL, STRUCTURED report with the following sections:
-
-## 🚀 Features Shipped
-## 🐛 Bugs Fixed
-## 🏗️ Architecture & Refactors
-## ⚠️ Tech Debt / Risks Introduced
-## 🎯 Suggested Next Steps
-
-Rules:
-- Each bullet must be specific and actionable, not vague
-- Include: WHAT was done + WHY it matters + IMPACT
-- "Next Steps" must be concrete tasks for tomorrow
-- Use bold for key terms
-- If no commits today, analyze the diff and give insight`,
-                    [{ role: "user", content: rawData }]
-                );
+                const promptTemplate = getPrompt("Dayreport", "You are a senior engineering lead reviewing a developer's daily work log. Produce a PROFESSIONAL, STRUCTURED report.");
+                analysis = await callClaude(promptTemplate, [{ role: "user", content: rawData }]);
             } catch (apiError) {
                 analysis = "API Error (using raw display):\n" + rawData;
             }
@@ -436,7 +433,13 @@ Rules:
 
         if (name === "get_project_summary") {
             const data = getProjectSummaryData();
-            const report = `${chalk.cyan.bold("-->>-- Project Summary --<<--\n")}
+            const rawData = `File Tree:\n${data.fileTree}\n\nTech Stack: ${data.stack} (${data.displayName})\n\nRecent commits:\n${data.recentCommits}`;
+            let report = "";
+            try {
+                const promptTemplate = getPrompt("Summary", "You are a senior developer analyzing the project structure. Produce a detailed summary.");
+                report = await callClaude(promptTemplate, [{ role: "user", content: rawData }]);
+            } catch (e) {
+                report = `${chalk.cyan.bold("-->>-- Project Summary --<<--\n")}
 ${chalk.green("-- Tech Stack --")}
 ${chalk.yellow(`* Stack: ${data.stack} (${data.displayName})\n`)}
 ${chalk.green("-- File Tree --")}
@@ -444,6 +447,7 @@ ${data.fileTree}
 
 ${chalk.green("-- Recent History --")}
 ${data.recentCommits}`;
+            }
             return {
                 content: [{ type: "text", text: report }],
             };
@@ -483,24 +487,8 @@ ${chalk.yellow(`* ${stack.persona}`)}`;
 
             let review = "";
             try {
-                review = await callClaude(
-                    `You are a senior code reviewer with 15+ years of experience.
-Review the following git diff and produce a PROFESSIONAL review:
-
-## 🔴 Critical Issues (must fix before merge)
-## 🟠 Warnings (should address)
-## 🟡 Suggestions (nice to have)
-## ✅ What's Done Well
-## 📋 Summary Verdict: APPROVE / REQUEST CHANGES / NEEDS DISCUSSION
-
-Rules:
-- Be specific: cite exact line/function names
-- Security issues are ALWAYS critical
-- Performance issues >10% impact are warnings
-- Style issues are suggestions only
-- End with a clear verdict`,
-                    [{ role: "user", content: diff }]
-                );
+                const promptTemplate = getPrompt("Review", "You are a senior code reviewer with 15+ years of experience. Review the following git diff and produce a PROFESSIONAL review.");
+                review = await callClaude(promptTemplate, [{ role: "user", content: diff }]);
             } catch (apiError) {
                 review = "API Error: could not review diff.";
             }
@@ -511,31 +499,23 @@ Rules:
         }
 
         if (name === "ask_question") {
-            const { question } = params.params;
+            const { question } = args;
             const cwd = process.cwd();
             const context = getProjectContext(cwd);
 
             let answer = "";
             try {
-                answer = await callClaude(
-                    `You are a ${context.displayName} pair programmer embedded in this project.
-
+                const basePrompt = `You are a ${context.displayName} pair programmer embedded in this project.
 PROJECT CONTEXT:
 - Tech Stack: ${context.stack}
 - Recent files changed: ${context.recentFiles}
 - Git status: ${context.gitStatus}
 - File tree:
-${context.fileTree}
+${context.fileTree}`;
+                const filePrompt = getPrompt("Ask", "Give production-quality, battle-tested answers.");
+                const systemPrompt = basePrompt + "\n\n" + filePrompt;
 
-YOUR BEHAVIOR:
-- Give production-quality, battle-tested answers
-- Always include code examples when relevant
-- Mention edge cases and potential pitfalls
-- Structure: Answer → Code Example → Caveats → Alternatives
-- Be concise but thorough — no filler text
-- If the question is ambiguous, ask ONE clarifying question`,
-                    [{ role: "user", content: question }]
-                );
+                answer = await callClaude(systemPrompt, [{ role: "user", content: question }]);
             } catch (apiError) {
                 answer = "API Error: could not answer question.";
             }
@@ -552,22 +532,8 @@ YOUR BEHAVIOR:
 
             let suggestions = "";
             try {
-                suggestions = await callClaude(
-                    `You are a senior software architect reviewing this project.
-Based on the project structure, tech stack, and recent history, give CONCRETE improvement suggestions:
-
-## 🏆 Quick Wins (< 1 day effort)
-## 📦 Medium Improvements (1-3 days)
-## 🔭 Strategic Investments (1+ week)
-## 🔒 Security Hardening
-## ⚡ Performance Opportunities
-
-Rules:
-- Each suggestion must include: WHAT + WHY + HOW (brief steps)
-- Prioritize by impact/effort ratio
-- Reference specific files when possible`,
-                    [{ role: "user", content: rawData }]
-                );
+                const promptTemplate = getPrompt("Suggest", "You are a senior software architect reviewing this project. Give CONCRETE improvement suggestions.");
+                suggestions = await callClaude(promptTemplate, [{ role: "user", content: rawData }]);
             } catch (apiError) {
                 suggestions = "API Error: could not generate suggestions.";
             }
@@ -637,30 +603,15 @@ program
             const spinner = ora(chalk.blue("Analyzing commits...")).start();
 
             try {
-                const analysis = await callClaude(
-                    `You are a senior engineering lead reviewing a developer's daily work log.
-Produce a PROFESSIONAL, STRUCTURED report with the following sections:
-
-## 🚀 Features Shipped
-## 🐛 Bugs Fixed
-## 🏗️ Architecture & Refactors
-## ⚠️ Tech Debt / Risks Introduced
-## 🎯 Suggested Next Steps
-
-Rules:
-- Each bullet must be specific and actionable, not vague
-- Include: WHAT was done + WHY it matters + IMPACT
-- "Next Steps" must be concrete tasks for tomorrow
-- Use bold for key terms
-- If no commits today, analyze the diff and give insight`,
-                    [{ role: "user", content: rawData }]
-                );
+                const promptTemplate = getPrompt("Dayreport", "You are a senior engineering lead reviewing a developer's daily work log. Produce a PROFESSIONAL, STRUCTURED report.");
+                const analysis = await callClaude(promptTemplate, [{ role: "user", content: rawData }]);
                 spinner.succeed(chalk.green("Analysis complete"));
                 console.log(analysis);
-            } catch (apiError) {
-                spinner.fail(chalk.red("API unavailable"));
-                console.log(chalk.yellow("Raw git data:"));
-                console.log(rawData);
+            } catch (err) {
+                spinner.stop();
+                if (!handleClaudeDelegate(err, getPrompt("Dayreport"), rawData)) {
+                    console.error(chalk.red("Error:"), err.message);
+                }
             }
             console.log("");
         } catch (error) {
@@ -725,22 +676,15 @@ program
                     });
 
                     try {
-                        const systemPrompt = `You are a ${context.displayName} pair programmer embedded in this project.
-
+                        const basePrompt = `You are a ${context.displayName} pair programmer embedded in this project.
 PROJECT CONTEXT:
 - Tech Stack: ${context.stack}
 - Recent files changed: ${context.recentFiles}
 - Git status: ${context.gitStatus}
 - File tree:
-${context.fileTree}
-
-YOUR BEHAVIOR:
-- Give production-quality, battle-tested answers
-- Always include code examples when relevant
-- Mention edge cases and potential pitfalls
-- Structure: Answer → Code Example → Caveats → Alternatives
-- Be concise but thorough — no filler text
-- If the question is ambiguous, ask ONE clarifying question`;
+${context.fileTree}`;
+                        const devPrompt = getPrompt("DeveloperMode", "Give production-quality, battle-tested answers. If the task is vague, CROSS-QUESTION the user.");
+                        const systemPrompt = basePrompt + "\n\n" + devPrompt;
 
                         const response = await callClaude(
                             systemPrompt,
@@ -754,10 +698,10 @@ YOUR BEHAVIOR:
                         });
 
                         askQuestion();
-                    } catch (error) {
-                        console.error(
-                            chalk.red(`Error: ${error.message}`)
-                        );
+                    } catch (err) {
+                        if (!handleClaudeDelegate(err, "Please assist the user directly in Claude Code. Do not enter Developer Mode manually.", "")) {
+                            console.error(chalk.red(`Error: ${err.message}`));
+                        }
                         askQuestion();
                     }
                 });
@@ -786,21 +730,15 @@ program
             const spinner = ora(chalk.blue("Thinking...")).start();
 
             try {
-                const systemPrompt = `You are a ${context.displayName} pair programmer embedded in this project.
-
+                const basePrompt = `You are a ${context.displayName} pair programmer embedded in this project.
 PROJECT CONTEXT:
 - Tech Stack: ${context.stack}
 - Recent files changed: ${context.recentFiles}
 - Git status: ${context.gitStatus}
 - File tree:
-${context.fileTree}
-
-YOUR BEHAVIOR:
-- Give production-quality, battle-tested answers
-- Always include code examples when relevant
-- Mention edge cases and potential pitfalls
-- Structure: Answer → Code Example → Caveats → Alternatives
-- Be concise but thorough — no filler text`;
+${context.fileTree}`;
+                const filePrompt = getPrompt("Ask", "Give production-quality, battle-tested answers.");
+                const systemPrompt = basePrompt + "\n\n" + filePrompt;
 
                 spinner.stop();
                 const answer = await callClaude(
@@ -809,9 +747,11 @@ YOUR BEHAVIOR:
                     true
                 );
                 console.log("");
-            } catch (apiError) {
-                spinner.fail(chalk.red("API Error"));
-                console.log(chalk.red(apiError.message));
+            } catch (err) {
+                spinner.stop();
+                if (!handleClaudeDelegate(err, getPrompt("Ask"), `Context:\n${basePrompt}\nQuestion: ${question}`)) {
+                    console.error(chalk.red("Error:"), err.message);
+                }
             }
         } catch (error) {
             console.error(chalk.red("Error:"), error.message);
@@ -849,29 +789,15 @@ program
             const spinner = ora(chalk.blue("Reviewing code...")).start();
 
             try {
-                const review = await callClaude(
-                    `You are a senior code reviewer with 15+ years of experience.
-Review the following git diff and produce a PROFESSIONAL review:
-
-## 🔴 Critical Issues (must fix before merge)
-## 🟠 Warnings (should address)
-## 🟡 Suggestions (nice to have)
-## ✅ What's Done Well
-## 📋 Summary Verdict: APPROVE / REQUEST CHANGES / NEEDS DISCUSSION
-
-Rules:
-- Be specific: cite exact line/function names
-- Security issues are ALWAYS critical
-- Performance issues >10% impact are warnings
-- Style issues are suggestions only
-- End with a clear verdict`,
-                    [{ role: "user", content: diff }]
-                );
+                const promptTemplate = getPrompt("Review", "You are a senior code reviewer with 15+ years of experience. Review the following git diff and produce a PROFESSIONAL review.");
+                const review = await callClaude(promptTemplate, [{ role: "user", content: diff }]);
                 spinner.succeed(chalk.green("Review complete"));
                 console.log(review);
-            } catch (apiError) {
-                spinner.fail(chalk.red("API Error"));
-                console.log(chalk.red(apiError.message));
+            } catch (err) {
+                spinner.stop();
+                if (!handleClaudeDelegate(err, getPrompt("Review"), `Git Diff:\n${diff}`)) {
+                    console.error(chalk.red("Error:"), err.message);
+                }
             }
             console.log("");
         } catch (error) {
@@ -907,24 +833,18 @@ program
 
             try {
                 spinner.stop();
+                const promptTemplate = getPrompt("Explain", "You are a senior developer creating technical documentation. Explain the following code/file.");
                 const explanation = await callClaude(
-                    `You are a senior developer creating technical documentation.
-Explain the following code/file:
-
-## 📋 Purpose & Responsibilities
-## 🔄 How It Works (step-by-step flow)
-## 🔗 Dependencies & Integrations
-## ⚠️ Important Caveats / Gotchas
-## 💡 Usage Examples
-
-Be clear enough for a mid-level developer joining the project today.`,
+                    promptTemplate,
                     [{ role: "user", content: content }],
                     true
                 );
                 console.log("");
-            } catch (apiError) {
-                spinner.fail(chalk.red("API Error"));
-                console.log(chalk.red(apiError.message));
+            } catch (err) {
+                spinner.stop();
+                if (!handleClaudeDelegate(err, getPrompt("Explain"), content)) {
+                    console.error(chalk.red("Error:"), err.message);
+                }
             }
         } catch (error) {
             console.error(chalk.red("Error:"), error.message);
@@ -946,27 +866,18 @@ program
 
             try {
                 spinner.stop();
+                const promptTemplate = getPrompt("Suggest", "You are a senior software architect reviewing this project. Give CONCRETE improvement suggestions.");
                 const suggestions = await callClaude(
-                    `You are a senior software architect reviewing this project.
-Based on the project structure, tech stack, and recent history, give CONCRETE improvement suggestions:
-
-## 🏆 Quick Wins (< 1 day effort)
-## 📦 Medium Improvements (1-3 days)
-## 🔭 Strategic Investments (1+ week)
-## 🔒 Security Hardening
-## ⚡ Performance Opportunities
-
-Rules:
-- Each suggestion must include: WHAT + WHY + HOW (brief steps)
-- Prioritize by impact/effort ratio
-- Reference specific files when possible`,
+                    promptTemplate,
                     [{ role: "user", content: rawData }],
                     true
                 );
                 console.log("");
-            } catch (apiError) {
-                spinner.fail(chalk.red("API Error"));
-                console.log(chalk.red(apiError.message));
+            } catch (err) {
+                spinner.stop();
+                if (!handleClaudeDelegate(err, getPrompt("Suggest"), rawData)) {
+                    console.error(chalk.red("Error:"), err.message);
+                }
             }
         } catch (error) {
             console.error(chalk.red("Error:"), error.message);
