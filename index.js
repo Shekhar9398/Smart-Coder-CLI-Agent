@@ -37,12 +37,12 @@ const checkClaudeAuth = () => {
 
 const handleClaudeDelegate = (err, instructions, rawData) => {
     if (err.message === "CLAUDE_DELEGATE") {
-        console.log("\n" + chalk.cyan.bold("-->>-- Delegating to Claude Code --<<--\n"));
-        console.log("CLAUDE: The user has requested this operation. I am delegating the execution to you since I lack a separate API key. Please read the following instructions and context, and complete the user's request flawlessly.");
-        console.log("\n=== INSTRUCTIONS/PROMPT ===");
+        console.log("\n" + chalk.cyan.bold(" ⎿  🔴 Delegating to Claude Code 🔴\n"));
+        console.log(" 🟢 CLAUDE: The user has requested this operation. I am delegating the execution to you since I lack a separate API key. Please read the following instructions and context, and complete the user's request flawlessly.");
+        console.log("\n 🟢 INSTRUCTIONS/PROMPT ");
         console.log(instructions);
         if (rawData) {
-            console.log("\n=== CONTEXT ===");
+            console.log("\n 🟢 CONTEXT ");
             console.log(rawData);
         }
         return true;
@@ -300,7 +300,7 @@ const getProjectSummaryData = () => {
             return fs
                 .readdirSync(dir)
                 .filter(f => !["node_modules", ".git", "dist", "build"].includes(f))
-                .map(f => `${"  ".repeat(depth)}* ${f}`)
+                .map(f => `     ${"  ".repeat(depth)}🟡 ${f}`)
                 .flat();
         } catch {
             return [];
@@ -439,14 +439,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 const promptTemplate = getPrompt("Summary", "You are a senior developer analyzing the project structure. Produce a detailed summary.");
                 report = await callClaude(promptTemplate, [{ role: "user", content: rawData }]);
             } catch (e) {
-                report = `${chalk.cyan.bold("-->>-- Project Summary --<<--\n")}
-${chalk.green("-- Tech Stack --")}
-${chalk.yellow(`* Stack: ${data.stack} (${data.displayName})\n`)}
-${chalk.green("-- File Tree --")}
-${data.fileTree}
-
-${chalk.green("-- Recent History --")}
-${data.recentCommits}`;
+                const logs = data.recentCommits.split('\n').filter(Boolean).map(l => `     🟡 ${l}`).join('\n');
+                report = ` ⎿  🔴 Project Summary 🔴\n\n     🟢 Tech Stack\n     🟡 ${data.stack} (${data.displayName})\n\n     🟢 File Tree\n${data.fileTree}\n\n     🟢 Recent History\n${logs}`;
             }
             return {
                 content: [{ type: "text", text: report }],
@@ -456,13 +450,13 @@ ${data.recentCommits}`;
         if (name === "get_developer_context") {
             const cwd = process.cwd();
             const stack = detectTechStack(cwd);
-            const context = `${chalk.cyan.bold("-->>-- Developer Context --<<--\n")}
-${chalk.green("-- Tech Stack --")}
-${chalk.yellow(`* ${stack.stack}\n`)}
-${chalk.green("-- Role --")}
-${chalk.yellow(`* ${stack.displayName}\n`)}
-${chalk.green("-- Persona --")}
-${chalk.yellow(`* ${stack.persona}`)}`;
+            const context = `${chalk.cyan.bold(" ⎿  🔴 Developer Context 🔴\n")}
+${chalk.green("     🟢 Tech Stack")}
+${chalk.yellow(`     🟡 ${stack.stack}\n`)}
+${chalk.green("     🟢 Role")}
+${chalk.yellow(`     🟡 ${stack.displayName}\n`)}
+${chalk.green("     🟢 Persona")}
+${chalk.yellow(`     🟡 ${stack.persona}`)}`;
             return {
                 content: [{ type: "text", text: context }],
             };
@@ -599,7 +593,7 @@ program
 
             const rawData = `Git Commits:\n${commits || "No commits today"}\n\nFull Messages:\n${fullMessages || "N/A"}\n\nFile Changes:\n${stats || "No changes"}\n\nFiles Modified:\n${files || "N/A"}`;
 
-            console.log("\n" + chalk.cyan.bold("-->>-- Today's Work Report --<<--\n"));
+            console.log("\n" + chalk.cyan.bold(" ⎿  🔴 Today's Work Report 🔴\n"));
             const spinner = ora(chalk.blue("Analyzing commits...")).start();
 
             try {
@@ -626,13 +620,14 @@ program
     .action(() => {
         try {
             const data = getProjectSummaryData();
-            console.log("\n" + chalk.cyan.bold("-->>-- Project Summary --<<--\n"));
-            console.log(chalk.green("-- Tech Stack --"));
-            console.log(chalk.yellow(`* ${data.stack} (${data.displayName})\n`));
-            console.log(chalk.green("-- File Tree --"));
+            const logs = data.recentCommits.split('\n').filter(Boolean).map(l => `     🟡 ${l}`).join('\n');
+            console.log("\n" + chalk.cyan.bold(" ⎿  🔴 Project Summary 🔴\n"));
+            console.log(chalk.green("     🟢 Tech Stack"));
+            console.log(chalk.yellow(`     🟡 ${data.stack} (${data.displayName})\n`));
+            console.log(chalk.green("     🟢 File Tree"));
             console.log(data.fileTree);
-            console.log("\n" + chalk.green("-- Recent History --"));
-            console.log(data.recentCommits);
+            console.log("\n" + chalk.green("     🟢 Recent History"));
+            console.log(logs);
             console.log("");
         } catch (error) {
             console.error(chalk.red("Error generating summary:"), error.message);
@@ -648,11 +643,11 @@ program
         const context = getProjectContext(cwd);
 
         if (subcommand === "mode") {
-            console.log("\n" + chalk.cyan.bold("-->>-- Developer Mode --<<--\n"));
-            console.log(chalk.green(`-- Acting as ${context.displayName} --\n`));
+            console.log("\n" + chalk.cyan.bold(" ⎿  🔴 Developer Mode 🔴\n"));
+            console.log(chalk.green(`     🟢 Acting as ${context.displayName} \n`));
             console.log(
                 chalk.yellow(
-                    `* Type your questions or commands.\n* Type '/exit' or leave empty to quit.\n`
+                    `     🟡 Type your questions or commands.\n     🟡 Type '/exit' or leave empty to quit.\n`
                 )
             );
 
@@ -709,11 +704,13 @@ ${context.fileTree}`;
 
             askQuestion();
         } else {
-            console.log("\n" + chalk.cyan.bold("-->>-- Developer Context --<<--\n"));
-            console.log(chalk.yellow(`* Tech Stack: ${context.stack}`));
-            console.log(chalk.yellow(`* Role: ${context.displayName}`));
+            console.log("\n" + chalk.cyan.bold(" ⎿  🔴 Developer Context 🔴\n"));
+            console.log(chalk.green("     🟢 Tech Stack"));
+            console.log(chalk.yellow(`     🟡 ${context.stack}`));
+            console.log(chalk.green("\n     🟢 Role"));
+            console.log(chalk.yellow(`     🟡 ${context.displayName}`));
             console.log(
-                chalk.yellow(`\n* Use 'smartcoder developer mode' to start interactive session.\n`)
+                chalk.yellow(`\n     🟡 Use 'smartcoder developer mode' to start interactive session.\n`)
             );
         }
     });
@@ -781,12 +778,12 @@ program
             }
 
             if (!diff) {
-                console.log(chalk.yellow("No git changes to review."));
+                console.log(chalk.yellow("     🟡 No git changes to review."));
                 return;
             }
 
-            console.log("\n" + chalk.cyan.bold("-->>-- Code Review --<<--\n"));
-            const spinner = ora(chalk.blue("Reviewing code...")).start();
+            console.log("\n" + chalk.cyan.bold(" ⎿  🔴 Code Review 🔴\n"));
+            const spinner = ora(chalk.blue("     🟡 Reviewing code...")).start();
 
             try {
                 const promptTemplate = getPrompt("Review", "You are a senior code reviewer with 15+ years of experience. Review the following git diff and produce a PROFESSIONAL review.");
@@ -828,8 +825,8 @@ program
                 content = `File Tree:\n${data.fileTree}\n\nTech Stack: ${data.stack} (${data.displayName})\n\nRecent commits:\n${data.recentCommits}`;
             }
 
-            console.log("\n" + chalk.cyan.bold(`-->>-- Explaining ${targetName} --<<--\n`));
-            const spinner = ora(chalk.blue("Analyzing...")).start();
+            console.log("\n" + chalk.cyan.bold(` ⎿  🔴 Explaining ${targetName} 🔴\n`));
+            const spinner = ora(chalk.blue("     🟡 Analyzing...")).start();
 
             try {
                 spinner.stop();
@@ -861,8 +858,8 @@ program
             const data = getProjectSummaryData();
             const rawData = `File Tree:\n${data.fileTree}\n\nTech Stack: ${data.stack} (${data.displayName})\n\nRecent commits:\n${data.recentCommits}`;
 
-            console.log("\n" + chalk.cyan.bold("-->>-- Project Suggestions --<<--\n"));
-            const spinner = ora(chalk.blue("Analyzing project...")).start();
+            console.log("\n" + chalk.cyan.bold(" ⎿  🔴 Project Suggestions 🔴\n"));
+            const spinner = ora(chalk.blue("     🟡 Analyzing project...")).start();
 
             try {
                 spinner.stop();

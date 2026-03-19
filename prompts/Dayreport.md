@@ -9,8 +9,16 @@ RULES:
 - "Next Steps" must be concrete tasks for tomorrow based on what appears incomplete or needs follow-up in the diff.
 - Keep the tone advanced, analytical, and professional.
 
-## 🚀 Tasks Performed (Derived from Code Changes)
-## 🐛 Bug Fixes Detected
-## 🏗️ Architecture & Refactoring Insights
-## ⚠️ Tech Debt or Risks Introduced
-## 🎯 Suggested Next Steps
+CRITICAL FORMATTING RULES:
+- Use 🔴 at the start and end of the Main Title (e.g., 🔴 Daily Developer Report 🔴).
+- Use 🟢 at the start of Subtitles instead of markdown hashes (e.g., 🟢 Tasks Performed).
+- Use 🟡 at the start of every bullet point instead of dashes/asterisks (e.g., 🟡 Implemented ...).
+- Do NOT use standard markdown headers (##) or default bullet lists (- or *).
+
+🔴 Daily Developer Report 🔴
+
+🟢 Tasks Performed (Derived from Code Changes)
+🟢 Bug Fixes Detected
+🟢 Architecture & Refactoring Insights
+🟢 Tech Debt or Risks Introduced
+🟢 Suggested Next Steps
